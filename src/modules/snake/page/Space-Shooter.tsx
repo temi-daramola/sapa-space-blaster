@@ -38,6 +38,8 @@ const Game: React.FC = () => {
   >([]);
   const explosions = useRef<{ particles: Particle[] }[]>([]);
   const keys = useRef<Record<string, boolean>>({});
+  const isDragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
   type Particle = {
     x: number;
@@ -92,6 +94,50 @@ const Game: React.FC = () => {
     const handleKeyUp = (e: KeyboardEvent) => (keys.current[e.key] = false);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+
+    // --- Touch / Drag Controls for Mobile ---
+    const handleTouchStart = (e: TouchEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const tx = touch.clientX - rect.left;
+      const ty = touch.clientY - rect.top;
+
+      if (
+        tx >= player.current.x &&
+        tx <= player.current.x + player.current.width &&
+        ty >= player.current.y &&
+        ty <= player.current.y + player.current.height
+      ) {
+        isDragging.current = true;
+        dragOffset.current = {
+          x: tx - player.current.x,
+          y: ty - player.current.y,
+        };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current) return;
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      let tx = touch.clientX - rect.left - dragOffset.current.x;
+      let ty = touch.clientY - rect.top - dragOffset.current.y;
+
+      // Keep player inside canvas
+      tx = Math.max(0, Math.min(tx, canvas.width - player.current.width));
+      ty = Math.max(0, Math.min(ty, canvas.height - player.current.height));
+
+      player.current.x = tx;
+      player.current.y = ty;
+    };
+
+    const handleTouchEnd = () => {
+      isDragging.current = false;
+    };
+
+    canvas.addEventListener("touchstart", handleTouchStart);
+    canvas.addEventListener("touchmove", handleTouchMove);
+    canvas.addEventListener("touchend", handleTouchEnd);
 
     // Background stars
     const stars = Array.from({ length: 100 }, () => ({
@@ -185,7 +231,7 @@ const Game: React.FC = () => {
       });
 
       if (!paused && !isGameOver) {
-        // Movement
+        // Keyboard movement (desktop)
         if (keys.current["ArrowLeft"] && player.current.x > 0)
           player.current.x -= player.current.speed;
         if (
@@ -368,6 +414,9 @@ const Game: React.FC = () => {
       clearInterval(shootInterval);
       clearInterval(asteroidInterval);
       clearInterval(powerInterval);
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+      canvas.removeEventListener("touchend", handleTouchEnd);
     };
   }, [isGameOver, paused, lasers, canvasSize]);
 
@@ -389,7 +438,7 @@ const Game: React.FC = () => {
             ref={canvasRef}
             width={canvasSize.width}
             height={canvasSize.height}
-            style={{ width: "100%", height: "100%" }}
+            style={{ width: "100%", height: "100%", touchAction: "none" }}
           />
         </Box>
         {!isGameOver && (
